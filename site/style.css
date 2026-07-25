@@ -1,0 +1,141 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; font-family: "Hiragino Sans", "Yu Gothic", sans-serif; }
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+#toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #1a3a5c;
+  color: white;
+}
+#toolbar h1 { font-size: 18px; margin: 0; }
+.toolbar-buttons button {
+  margin-left: 8px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 4px;
+  background: #2f6fa8;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+.toolbar-buttons button:hover { background: #3a82c4; }
+
+#main { flex: 1; display: flex; min-height: 0; }
+
+#sidebar {
+  width: 320px;
+  min-width: 320px;
+  padding: 12px;
+  background: #f5f5f5;
+  overflow-y: auto;
+  border-right: 1px solid #ddd;
+}
+.panel {
+  background: white;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.panel h2 { font-size: 14px; margin: 0 0 8px; color: #333; }
+.panel-header { display: flex; justify-content: space-between; align-items: center; }
+.panel-header h2 { margin: 0; }
+
+#address-input {
+  width: 100%;
+  height: 120px;
+  resize: vertical;
+  font-size: 13px;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+#btn-apply {
+  margin-top: 8px;
+  width: 100%;
+  padding: 8px;
+  background: #1a3a5c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#btn-apply:hover { background: #2f5580; }
+
+.errors { color: #c0392b; font-size: 12px; margin-top: 6px; white-space: pre-line; }
+
+#btn-clear-all {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#selection-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 300px; overflow-y: auto; }
+#selection-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+}
+#selection-list li:hover { background: #f0f7ff; }
+#selection-list .focus-btn {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+#selection-list .remove-btn {
+  color: #c0392b;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  font-size: 14px;
+}
+#selection-list .remove-btn:hover { background: #fbe4e4; }
+
+.hint { font-size: 12px; color: #777; padding: 0 4px; }
+
+#map-container { flex: 1; position: relative; }
+#map { width: 100%; height: 100%; }
+
+#loading {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.75);
+  color: white;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  z-index: 1000;
+}
+#loading.hidden { display: none; }
+
+.parcel-tooltip { font-size: 12px; }
+
+/* ===== 印刷用レイアウト ===== */
+#print-sheet { display: none; }
+
+@media print {
+  #toolbar .toolbar-buttons, #sidebar .hint { display: none !important; }
+  #sidebar { display: none !important; }
+  body, #app, #main { height: auto; }
+  #map-container { height: 90vh; }
+  #toolbar h1::after {
+    content: " - 選択リストは印刷プレビューの下部をご覧ください";
+  }
+  @page { size: A4 landscape; margin: 10mm; }
+}
