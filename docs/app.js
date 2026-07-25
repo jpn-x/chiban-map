@@ -164,22 +164,44 @@ function resolveCityFromLine(line) {
   return { citycode, pref: info.pref, city: info.city, matchedPrefix: info.city };
 }
 
-function findFeatureByChiban(geojson, chibanQuery) {
-  if (!chibanQuery) return null;
+// 完全一致 / 冠字省略 / 分筆後の枝番一括 のいずれかで該当featureを探す。
+// 戻り値: { features: [...], note: string|null }
+function findFeaturesByChiban(geojson, chibanQuery) {
+  if (!chibanQuery) return { features: [], note: null };
   const feats = geojson.features;
-  let match = feats.find((f) => f.properties["地番"] === chibanQuery);
-  if (match) return match;
+
+  const exact = feats.find((f) => f.properties["地番"] === chibanQuery);
+  if (exact) return { features: [exact], note: null };
+
   // 「甲」「乙」等の冠字が省略されている場合の救済
-  match = feats.find((f) => f.properties["地番"].endsWith(chibanQuery));
-  if (match) return match;
-  return null;
+  const suffixMatch = feats.find((f) => f.properties["地番"].endsWith(chibanQuery));
+  if (suffixMatch) return { features: [suffixMatch], note: null };
+
+  // 親地番が分筆され「458」が無く「458-1」「458-2」等の枝番のみ存在するケース
+  const branchPattern = new RegExp(`(^|[甲乙丙丁])${chibanQuery}-\\d+$`);
+  const branches = feats.filter((f) => branchPattern.test(f.properties["地番"]));
+  if (branches.length > 0) {
+    return { features: branches, note: `${chibanQuery}は分筆されており、${branches.length}件の枝番をまとめて表示しました` };
+  }
+
+  return { features: [], note: null };
 }
 
 const CHOME_PATTERN = /\d+\s*丁目/;
 
+// 全角数字・全角/各種ダッシュ記号を半角に正規化する(実データは半角表記のため)
+function normalizeAddressText(s) {
+  return s
+    .normalize("NFKC")
+    .replace(/[‐֊‑‒–—―−ー]/g, "-");
+}
+
 async function applyAddressInput() {
   const raw = document.getElementById("address-input").value;
-  const lines = raw.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  const lines = raw
+    .split("\n")
+    .map((l) => normalizeAddressText(l.trim()))
+    .filter((l) => l.length > 0);
   const errors = [];
 
   for (const line of lines) {
@@ -226,15 +248,18 @@ async function applyAddressInput() {
     }
     ensureOazaClickLayer(citycode, oazaName, geojson);
 
-    const feature = findFeatureByChiban(geojson, chibanQuery);
-    if (!feature) {
+    const { features: matchedFeatures, note } = findFeaturesByChiban(geojson, chibanQuery);
+    if (matchedFeatures.length === 0) {
       const hint = CHOME_PATTERN.test(line)
         ? "(「◯丁目」形式の住所は住居表示のため、地番とは番号が異なり見つからない場合があります)"
         : "";
       errors.push(`地番が見つかりませんでした: ${line} ${hint}`);
       continue;
     }
-    addSelection(citycode, pref, city, oazaName, feature);
+    for (const feature of matchedFeatures) {
+      addSelection(citycode, pref, city, oazaName, feature);
+    }
+    if (note) errors.push(`${line}: ${note}`);
   }
 
   document.getElementById("parse-errors").textContent = errors.join("\n");
