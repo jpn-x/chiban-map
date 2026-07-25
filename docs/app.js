@@ -1,8 +1,9 @@
 const state = {
-  cityIndex: null,       // index.json の内容 (citycode, city, oaza[])
-  oazaCache: new Map(),  // oaza名 -> GeoJSON FeatureCollection
-  oazaLayers: new Map(), // oaza名 -> L.geoJSON layer (地図上のクリック可能レイヤー)
-  selections: new Map(), // key(citycode|oaza|chiban) -> {label, layer, feature}
+  manifest: null,          // { cities: { citycode: {pref, city} } } 全国対応市区町村一覧
+  cityIndexCache: new Map(), // citycode -> index.json の内容
+  oazaCache: new Map(),     // "citycode:oaza名" -> GeoJSON FeatureCollection
+  oazaLayers: new Map(),    // "citycode:oaza名" -> L.geoJSON layer (地図上のクリック可能レイヤー)
+  selections: new Map(),    // key(citycode|oaza|chiban) -> {label, layer, feature}
 };
 
 const map = L.map("map").setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
@@ -18,60 +19,75 @@ function setLoading(on) {
   document.getElementById("loading").classList.toggle("hidden", !on);
 }
 
-async function loadCityIndex() {
-  const res = await fetch(`${CONFIG.DATA_BASE_URL}/${CONFIG.DEFAULT_CITY}/index.json`);
-  if (!res.ok) throw new Error("市区町村インデックスの取得に失敗しました");
-  state.cityIndex = await res.json();
+async function loadManifest() {
+  const res = await fetch(`${CONFIG.DATA_BASE_URL}/manifest.json`);
+  if (!res.ok) throw new Error("市区町村一覧の取得に失敗しました");
+  state.manifest = await res.json();
 }
 
-async function loadOaza(oazaName) {
-  if (state.oazaCache.has(oazaName)) return state.oazaCache.get(oazaName);
-  const entry = state.cityIndex.oaza.find((o) => o.name === oazaName);
+async function loadCityIndex(citycode) {
+  if (state.cityIndexCache.has(citycode)) return state.cityIndexCache.get(citycode);
+  setLoading(true);
+  try {
+    const res = await fetch(`${CONFIG.DATA_BASE_URL}/${citycode}/index.json`);
+    if (!res.ok) return null;
+    const index = await res.json();
+    state.cityIndexCache.set(citycode, index);
+    return index;
+  } catch {
+    return null;
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function loadOaza(citycode, oazaName, cityIndex) {
+  const cacheKey = `${citycode}:${oazaName}`;
+  if (state.oazaCache.has(cacheKey)) return state.oazaCache.get(cacheKey);
+  const entry = cityIndex.oaza.find((o) => o.name === oazaName);
   if (!entry) return null;
   setLoading(true);
   try {
-    const res = await fetch(`${CONFIG.DATA_BASE_URL}/${CONFIG.DEFAULT_CITY}/${encodeURIComponent(entry.file)}`);
+    const res = await fetch(`${CONFIG.DATA_BASE_URL}/${citycode}/${encodeURIComponent(entry.file)}`);
     if (!res.ok) throw new Error(`${oazaName} の読み込みに失敗しました`);
     const geojson = await res.json();
-    state.oazaCache.set(oazaName, geojson);
+    state.oazaCache.set(cacheKey, geojson);
     return geojson;
   } finally {
     setLoading(false);
   }
 }
 
-function ensureOazaClickLayer(oazaName, geojson) {
-  if (state.oazaLayers.has(oazaName)) return;
+function ensureOazaClickLayer(citycode, oazaName, geojson) {
+  const cacheKey = `${citycode}:${oazaName}`;
+  if (state.oazaLayers.has(cacheKey)) return;
   const layer = L.geoJSON(geojson, {
     style: { color: "#4a90d9", weight: 1, fillOpacity: 0.02, opacity: 0.35 },
     onEachFeature: (feature, lyr) => {
-      lyr.on("click", () => toggleSelection(oazaName, feature, lyr));
+      lyr.on("click", () => toggleSelection(citycode, oazaName, feature, lyr));
       lyr.on("mouseover", () => lyr.setStyle({ fillOpacity: 0.15, opacity: 0.8 }));
       lyr.on("mouseout", () => lyr.setStyle({ fillOpacity: 0.02, opacity: 0.35 }));
     },
   }).addTo(map);
-  state.oazaLayers.set(oazaName, layer);
+  state.oazaLayers.set(cacheKey, layer);
 }
 
-function selectionKey(oazaName, chiban) {
-  return `${oazaName}|${chiban}`;
+function selectionKey(citycode, oazaName, chiban) {
+  return `${citycode}|${oazaName}|${chiban}`;
 }
 
-function addSelection(oazaName, feature) {
+function addSelection(citycode, pref, city, oazaName, feature) {
   const chiban = feature.properties["地番"];
-  const key = selectionKey(oazaName, chiban);
+  const key = selectionKey(citycode, oazaName, chiban);
   if (state.selections.has(key)) return;
 
+  const label = `${pref}${city}${oazaName}${chiban}`;
   const layer = L.geoJSON(feature, {
     style: { color: "#e8b400", weight: 2, fillColor: "#ffe066", fillOpacity: 0.6 },
-  }).bindTooltip(`${state.cityIndex.city}${oazaName}${chiban}`, { className: "parcel-tooltip" });
+  }).bindTooltip(label, { className: "parcel-tooltip" });
   layer.addTo(highlightLayerGroup);
 
-  state.selections.set(key, {
-    label: `${state.cityIndex.city}${oazaName}${chiban}`,
-    layer,
-    feature,
-  });
+  state.selections.set(key, { label, layer, feature });
   renderSelectionList();
 }
 
@@ -83,13 +99,14 @@ function removeSelection(key) {
   renderSelectionList();
 }
 
-function toggleSelection(oazaName, feature, lyr) {
+function toggleSelection(citycode, oazaName, feature, lyr) {
   const chiban = feature.properties["地番"];
-  const key = selectionKey(oazaName, chiban);
+  const key = selectionKey(citycode, oazaName, chiban);
   if (state.selections.has(key)) {
     removeSelection(key);
   } else {
-    addSelection(oazaName, feature);
+    const manifestEntry = state.manifest.cities[citycode];
+    addSelection(citycode, manifestEntry.pref, manifestEntry.city, oazaName, feature);
   }
 }
 
@@ -121,23 +138,30 @@ function renderSelectionList() {
   }
 }
 
-function findOazaInLine(line) {
-  // 都道府県・市区町村名を除去してから、既知の大字名の中で最長一致するものを探す
-  let rest = line.replace(/^\s*[^\s]*?[都道府県]/, "").trim();
-  if (state.cityIndex.city && rest.startsWith(state.cityIndex.city)) {
-    rest = rest.slice(state.cityIndex.city.length);
+// 都道府県+市区町村名で最長一致するmanifestエントリを探す。
+// 都道府県が省略され、市区町村名が一意に決まらない場合はambiguousを返す。
+function resolveCityFromLine(line) {
+  const cities = Object.entries(state.manifest.cities);
+  let best = null;
+  for (const [citycode, info] of cities) {
+    const full = info.pref + info.city;
+    if (line.startsWith(full) && (!best || full.length > best.matchedPrefix.length)) {
+      best = { citycode, pref: info.pref, city: info.city, matchedPrefix: full };
+    }
   }
-  rest = rest.trim();
+  if (best) return best;
 
-  const candidates = state.cityIndex.oaza
-    .map((o) => o.name)
-    .filter((name) => rest.startsWith(name))
-    .sort((a, b) => b.length - a.length);
-
-  if (candidates.length === 0) return null;
-  const oazaName = candidates[0];
-  const chibanQuery = rest.slice(oazaName.length).trim();
-  return { oazaName, chibanQuery };
+  const cityOnly = cities
+    .filter(([, info]) => line.startsWith(info.city))
+    .sort((a, b) => b[1].city.length - a[1].city.length);
+  if (cityOnly.length === 0) return null;
+  const topLen = cityOnly[0][1].city.length;
+  const ties = cityOnly.filter(([, info]) => info.city.length === topLen);
+  if (ties.length > 1) {
+    return { ambiguous: ties.map(([citycode, info]) => ({ citycode, pref: info.pref, city: info.city })) };
+  }
+  const [citycode, info] = ties[0];
+  return { citycode, pref: info.pref, city: info.city, matchedPrefix: info.city };
 }
 
 function findFeatureByChiban(geojson, chibanQuery) {
@@ -151,29 +175,66 @@ function findFeatureByChiban(geojson, chibanQuery) {
   return null;
 }
 
+const CHOME_PATTERN = /\d+\s*丁目/;
+
 async function applyAddressInput() {
   const raw = document.getElementById("address-input").value;
   const lines = raw.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
   const errors = [];
 
   for (const line of lines) {
-    const parsed = findOazaInLine(line);
-    if (!parsed) {
-      errors.push(`大字を特定できませんでした: ${line}`);
+    const cityMatch = resolveCityFromLine(line);
+    if (!cityMatch) {
+      errors.push(`市区町村を特定できませんでした(未対応のエリアの可能性があります): ${line}`);
       continue;
     }
-    const geojson = await loadOaza(parsed.oazaName);
+    if (cityMatch.ambiguous) {
+      const names = cityMatch.ambiguous.map((m) => `${m.pref}${m.city}`).join(" / ");
+      errors.push(`市区町村があいまいです。都道府県から入力してください(候補: ${names}): ${line}`);
+      continue;
+    }
+
+    const { citycode, pref, city, matchedPrefix } = cityMatch;
+    const rest = line.slice(matchedPrefix.length).trim();
+
+    const cityIndex = await loadCityIndex(citycode);
+    if (!cityIndex) {
+      errors.push(`${pref}${city} はまだデータ準備中です。しばらくしてから再度お試しください: ${line}`);
+      continue;
+    }
+
+    const oazaCandidates = cityIndex.oaza
+      .map((o) => o.name)
+      .filter((name) => rest.startsWith(name))
+      .sort((a, b) => b.length - a.length);
+
+    if (oazaCandidates.length === 0) {
+      const hint = CHOME_PATTERN.test(rest)
+        ? "(「◯丁目」は住居表示のため、地番データとは一致しない場合があります)"
+        : "";
+      errors.push(`大字/町名を特定できませんでした: ${line} ${hint}`);
+      continue;
+    }
+
+    const oazaName = oazaCandidates[0];
+    const chibanQuery = rest.slice(oazaName.length).trim();
+
+    const geojson = await loadOaza(citycode, oazaName, cityIndex);
     if (!geojson) {
-      errors.push(`データ取得に失敗: ${line}`);
+      errors.push(`データ取得に失敗しました: ${line}`);
       continue;
     }
-    ensureOazaClickLayer(parsed.oazaName, geojson);
-    const feature = findFeatureByChiban(geojson, parsed.chibanQuery);
+    ensureOazaClickLayer(citycode, oazaName, geojson);
+
+    const feature = findFeatureByChiban(geojson, chibanQuery);
     if (!feature) {
-      errors.push(`地番が見つかりませんでした: ${line}`);
+      const hint = CHOME_PATTERN.test(line)
+        ? "(「◯丁目」形式の住所は住居表示のため、地番とは番号が異なり見つからない場合があります)"
+        : "";
+      errors.push(`地番が見つかりませんでした: ${line} ${hint}`);
       continue;
     }
-    addSelection(parsed.oazaName, feature);
+    addSelection(citycode, pref, city, oazaName, feature);
   }
 
   document.getElementById("parse-errors").textContent = errors.join("\n");
@@ -227,7 +288,7 @@ document.getElementById("btn-pdf").addEventListener("click", () => {
 (async function init() {
   setLoading(true);
   try {
-    await loadCityIndex();
+    await loadManifest();
   } catch (e) {
     alert(e.message);
   } finally {

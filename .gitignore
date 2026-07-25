@@ -2,3 +2,5 @@
 data/
 node_modules/
 scripts/_debug_*
+__pycache__/
+*.pyc
