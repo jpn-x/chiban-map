@@ -194,7 +194,24 @@ function clearAll() {
   document.getElementById("parse-errors").textContent = "";
 }
 
-document.getElementById("btn-apply").addEventListener("click", applyAddressInput);
+function openSidebar() {
+  document.getElementById("sidebar").classList.add("open");
+  document.getElementById("sidebar-backdrop").classList.add("open");
+}
+function closeSidebar() {
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("sidebar-backdrop").classList.remove("open");
+}
+const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+
+document.getElementById("btn-menu").addEventListener("click", openSidebar);
+document.getElementById("btn-close-sidebar").addEventListener("click", closeSidebar);
+document.getElementById("sidebar-backdrop").addEventListener("click", closeSidebar);
+
+document.getElementById("btn-apply").addEventListener("click", async () => {
+  await applyAddressInput();
+  if (isMobile()) closeSidebar();
+});
 document.getElementById("btn-clear-all").addEventListener("click", clearAll);
 document.getElementById("btn-top").addEventListener("click", () => {
   clearAll();

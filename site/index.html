@@ -10,7 +10,10 @@
 <body>
 <div id="app">
   <header id="toolbar">
-    <h1>地番ハイライトマップ</h1>
+    <div class="toolbar-left">
+      <button id="btn-menu" class="icon-btn" aria-label="検索パネルを開く">☰</button>
+      <h1>地番ハイライトマップ</h1>
+    </div>
     <div class="toolbar-buttons">
       <button id="btn-top">TOPに戻る</button>
       <button id="btn-print">印刷プレビュー</button>
@@ -19,7 +22,9 @@
   </header>
 
   <div id="main">
+    <div id="sidebar-backdrop"></div>
     <aside id="sidebar">
+      <button id="btn-close-sidebar" class="icon-btn sidebar-close" aria-label="閉じる">✕</button>
       <section class="panel">
         <h2>住所・地番を入力</h2>
         <textarea id="address-input" placeholder="1行に1件ずつ入力してください&#10;例:&#10;愛媛県伊予市上三谷2293-1&#10;愛媛県伊予市上三谷2289-1&#10;愛媛県伊予市上野1972"></textarea>
@@ -35,7 +40,7 @@
         <ul id="selection-list"></ul>
       </section>
 
-      <p class="hint">地図上の筆をクリックしても追加・削除できます。</p>
+      <p class="hint">地図上の筆をタップしても追加・削除できます。</p>
     </aside>
 
     <main id="map-container">
