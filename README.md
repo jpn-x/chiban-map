@@ -7,7 +7,7 @@
 ## 構成
 
 ```
-site/       静的サイト本体 (Leaflet + 地理院タイル)。GitHub Pagesで公開
+docs/       静的サイト本体 (Leaflet + 地理院タイル)。GitHub Pagesで公開(/docs)
 scripts/    データ取得・加工・配信用スクリプト
 data/       ローカル作業用データ(gitには含めない)
 ```
